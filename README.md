@@ -1,4 +1,4 @@
-# Like a Dragon: Ishin! Fix
+# Dead Island 2 Fix
 [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W7W01UAI9)</br>
 [![Github All Releases](https://img.shields.io/github/downloads/Lyall/DeadIsland2Fix/total.svg)](https://github.com/Lyall/DeadIsland2Fix/releases)
 
@@ -22,7 +22,7 @@ Please report any issues you see.
 
 ## Screenshots
 
-| ![ezgif-3-cd50579b2d](https://user-images.githubusercontent.com/695941/220556453-ff9f70a9-e762-4351-9a29-b2c1a792aad9.gif) |
+| ![ezgif-3-f8484c90db](https://user-images.githubusercontent.com/695941/233657454-46a9effd-4168-4169-a168-8489942cc0a8.gif) |
 |:--:|
 | Disabled pillarboxing/letterboxing in cutscenes. |
 
