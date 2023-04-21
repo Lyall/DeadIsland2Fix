@@ -111,20 +111,6 @@ void __declspec(naked) AspectFOVFix_CC()
     }
 }
 
-// FOV Culling Hook
-DWORD64 FOVCullingReturnJMP;
-float fOne = (float)1;
-void __declspec(naked) FOVCulling_CC()
-{
-    __asm
-    {
-        movss xmm1, [fOne]                      // 90/90, there is undoubtedly a smarter way of doing this
-        movss[rdx + 0x00000310], xmm1           // Original code
-        movsd xmm0, [rbp + 0x000000E0]          // Original code
-        jmp[FOVCullingReturnJMP]
-    }
-}
-
 void Logging()
 {
     loguru::add_file("DeadIsland2Fix.log", loguru::Truncate, loguru::Verbosity_MAX);
