@@ -206,7 +206,6 @@ void ReadConfig()
     LOG_F(INFO, "Config Parse: iInjectionDelay: %dms", iInjectionDelay);
     LOG_F(INFO, "Config Parse: bAspectFix: %d", bAspectFix);
     LOG_F(INFO, "Config Parse: bFOVFix: %d", bFOVFix);
-    LOG_F(INFO, "Config Parse: fAdditionalFOV: %.2f", fAdditionalFOV);
     LOG_F(INFO, "Config Parse: iCustomResX: %d", iCustomResX);
     LOG_F(INFO, "Config Parse: iCustomResY: %d", iCustomResY);
     LOG_F(INFO, "Config Parse: fNewX: %.2f", fNewX);
