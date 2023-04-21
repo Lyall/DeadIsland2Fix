@@ -22,7 +22,7 @@ Please report any issues you see.
 
 ## Screenshots
 
-|  |
+| ![ezgif-3-f8484c90db](https://user-images.githubusercontent.com/695941/233657454-46a9effd-4168-4169-a168-8489942cc0a8.gif) |
 |:--:|
 | Disabled pillarboxing/letterboxing in cutscenes. |
 
