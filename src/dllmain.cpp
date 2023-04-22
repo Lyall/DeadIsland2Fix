@@ -10,6 +10,8 @@ inipp::Ini<char> ini;
 // INI Variables
 bool bAspectFix;
 bool bFOVFix;
+bool bHUDBorderLimit;
+int iHUDBorderLimit;
 int iCustomResX;
 int iCustomResY;
 int iInjectionDelay;
@@ -28,7 +30,7 @@ string sExeName;
 string sGameName;
 string sExePath;
 string sGameVersion;
-string sFixVer = "1.0.0";
+string sFixVer = "1.0.1";
 
 // CurrResolution Hook
 DWORD64 CurrResolutionReturnJMP;
@@ -111,6 +113,26 @@ void __declspec(naked) AspectFOVFix_CC()
     }
 }
 
+// HUDBorderLimit Hook
+DWORD64 HUDBorderLimitReturnJMP;
+float fHUDBorderLimit;
+void __declspec(naked) HUDBorderLimit_CC()
+{
+    __asm
+    {
+        cmp [iHUDBorderLimit], 1
+        jne originalCode
+        movss xmm2, [fHUDBorderLimit]
+        movss xmm0, [fHUDBorderLimit]
+        jmp originalCode
+
+        originalCode:
+            movss[rax + 0x000000AC], xmm2 // Original code
+            movss[rax + 0x000000A8], xmm0 // Original code
+            jmp[HUDBorderLimitReturnJMP]
+    }
+}
+
 void Logging()
 {
     loguru::add_file("DeadIsland2Fix.log", loguru::Truncate, loguru::Verbosity_MAX);
@@ -135,7 +157,6 @@ void ReadConfig()
 
     // Initialize config
     // UE4 games use launchers so config path is relative to launcher
-
     std::ifstream iniFile(".\\DeadIsland\\Binaries\\Win64\\DeadIsland2Fix.ini");
     if (!iniFile)
     {
@@ -168,6 +189,8 @@ void ReadConfig()
     inipp::get_value(ini.sections["Fix FOV"], "Enabled", bFOVFix);
     iFOVFix = (int)bFOVFix;
     inipp::get_value(ini.sections["Fix FOV"], "AdditionalFOV", fAdditionalFOV);
+    inipp::get_value(ini.sections["Remove HUD Size Limits"], "Enabled", bHUDBorderLimit);
+    iHUDBorderLimit = (int)bHUDBorderLimit;
 
     // Custom resolution
     if (iCustomResX > 0 && iCustomResY > 0)
@@ -192,6 +215,7 @@ void ReadConfig()
     LOG_F(INFO, "Config Parse: iInjectionDelay: %dms", iInjectionDelay);
     LOG_F(INFO, "Config Parse: bAspectFix: %d", bAspectFix);
     LOG_F(INFO, "Config Parse: bFOVFix: %d", bFOVFix);
+    LOG_F(INFO, "Config Parse: bHUDBorderLimit: %d", bHUDBorderLimit);
     LOG_F(INFO, "Config Parse: iCustomResX: %d", iCustomResX);
     LOG_F(INFO, "Config Parse: iCustomResY: %d", iCustomResY);
     LOG_F(INFO, "Config Parse: fNewX: %.2f", fNewX);
@@ -219,7 +243,7 @@ void AspectFOVFix()
             LOG_F(INFO, "Current Resolution: Pattern scan failed.");
         }
 
-        uint8_t* AspectFOVFixScanResult = Memory::PatternScan(baseModule, "E8 ?? ?? ?? ?? F3 0F ?? ?? ?? 48 ?? ?? ?? ?? ?? ?? 48 ?? ?? ?? ?? ?? ?? 48 ?? ?? 75 ?? ");
+        uint8_t* AspectFOVFixScanResult = Memory::PatternScan(baseModule, "E8 ?? ?? ?? ?? F3 0F ?? ?? ?? 48 ?? ?? ?? ?? ?? ?? 48 ?? ?? ?? ?? ?? ?? 48 ?? ?? 75 ??");
         if (AspectFOVFixScanResult)
         {
             FOVPiDiv = fPi / 360;
@@ -240,9 +264,25 @@ void AspectFOVFix()
     }
 }
 
-void HUDLimits()
+void HUDBorders()
 {
+    uint8_t* HUDBorderLimitScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? 48 8B ?? ?? ?? ?? ?? 8B ?? ?? ?? ?? ?? 89 ?? ?? ?? ?? ??");
+    if (HUDBorderLimitScanResult)
+    {
+        fHUDBorderLimit = (float)0.45; // 0.5 would result in an effectively invisible HUD so lets avoid that by limiting it a bit lower.
 
+        DWORD64 HUDBorderLimitAddress = (uintptr_t)HUDBorderLimitScanResult;
+        int HUDBorderLimitHookLength = Memory::GetHookLength((char*)HUDBorderLimitAddress, 13);
+        HUDBorderLimitReturnJMP = HUDBorderLimitAddress + HUDBorderLimitHookLength;
+        Memory::DetourFunction64((void*)HUDBorderLimitAddress, HUDBorderLimit_CC, HUDBorderLimitHookLength);
+
+        LOG_F(INFO, "HUD Border Limit: Hook length is %d bytes", HUDBorderLimitHookLength);
+        LOG_F(INFO, "HUD Border Limit: Hook address is 0x%" PRIxPTR, (uintptr_t)HUDBorderLimitAddress);
+    }
+    else if (!HUDBorderLimitScanResult)
+    {
+        LOG_F(INFO, "HUD Border Limit: Pattern scan failed.");
+    }
 }
 
 DWORD __stdcall Main(void*)
@@ -251,7 +291,7 @@ DWORD __stdcall Main(void*)
     ReadConfig();
     Sleep(iInjectionDelay);
     AspectFOVFix();
-    HUDLimits();
+    HUDBorders();
     return true; // end thread
 }
 
