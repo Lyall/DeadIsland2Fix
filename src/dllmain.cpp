@@ -219,13 +219,13 @@ void AspectFOVFix()
             LOG_F(INFO, "Current Resolution: Pattern scan failed.");
         }
 
-        uint8_t* AspectFOVFixScanResult = Memory::PatternScan(baseModule, "48 8B ? ? ? ? ? 48 8B ? ? ? ? ? 48 85 ? 75 ? 48 63 ? ? ? ? ? 85 C0");
+        uint8_t* AspectFOVFixScanResult = Memory::PatternScan(baseModule, "E8 ?? ?? ?? ?? F3 0F ?? ?? ?? 48 ?? ?? ?? ?? ?? ?? 48 ?? ?? ?? ?? ?? ?? 48 ?? ?? 75 ?? ");
         if (AspectFOVFixScanResult)
         {
             FOVPiDiv = fPi / 360;
             FOVDivPi = 360 / fPi;
 
-            DWORD64 AspectFOVFixAddress = (uintptr_t)AspectFOVFixScanResult;
+            DWORD64 AspectFOVFixAddress = (uintptr_t)AspectFOVFixScanResult + 0xA;
             int AspectFOVFixHookLength = Memory::GetHookLength((char*)AspectFOVFixAddress, 13);
             AspectFOVFixReturnJMP = AspectFOVFixAddress + AspectFOVFixHookLength;
             Memory::DetourFunction64((void*)AspectFOVFixAddress, AspectFOVFix_CC, AspectFOVFixHookLength);
@@ -240,12 +240,18 @@ void AspectFOVFix()
     }
 }
 
+void HUDLimits()
+{
+
+}
+
 DWORD __stdcall Main(void*)
 {
     Logging();
     ReadConfig();
     Sleep(iInjectionDelay);
     AspectFOVFix();
+    HUDLimits();
     return true; // end thread
 }
 
