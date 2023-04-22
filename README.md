@@ -9,7 +9,7 @@ This is a fix to remove pillarboxing/letterboxing in Dead Island 2.
 
 ## Installation
 - Grab the latest release of DeadIsland2Fix from [here.](https://github.com/Lyall/DeadIsland2Fix/releases)
-- Extract the contents of the release zip in to the the game folder.<br />(e.g. "<GamesFolder>\DeadIsland2").
+- Extract the contents of the release zip in to the the game folder (e.g. `"<GameDrive>\DeadIsland2"`).
 
 ### Linux/Steam Deck
 - Make sure you set the Steam launch options to `WINEDLLOVERRIDES="winmm.dll=n,b" %command%`
