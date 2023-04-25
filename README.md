@@ -6,6 +6,7 @@ This is a fix to remove pillarboxing/letterboxing in Dead Island 2.
 
 ## Features
 - Removes pillarboxing/letterboxing in cutscenes.
+- Removes limit on resizing HUD. (Especially useful at wider than 21:9)
 
 ## Installation
 - Grab the latest release of DeadIsland2Fix from [here.](https://github.com/Lyall/DeadIsland2Fix/releases)
