@@ -5,8 +5,24 @@ using namespace std;
 
 namespace Memory
 {
+    float roundf1(float var)
+    {
+        // we use array of chars to store number
+        // as a string.
+        char str[40];
+
+        // Print in string the value of var
+        // with two decimal point
+        sprintf(str, "%.1f", var);
+
+        // scan string value in var
+        sscanf(str, "%f", &var);
+
+        return var;
+    }
+
     template<typename T>
-    void Write(uintptr_t* writeAddress, T value)
+    void Write(uintptr_t writeAddress, T value)
     {
         DWORD oldProtect;
         VirtualProtect((LPVOID)(writeAddress), sizeof(T), PAGE_EXECUTE_WRITECOPY, &oldProtect);
@@ -22,9 +38,9 @@ namespace Memory
         VirtualProtect((LPVOID)address, numBytes, oldProtect, &oldProtect);
     }
 
-    void ReadBytes(const uintptr_t address, void* const buffer, const SIZE_T size) 
+    void ReadBytes(const uintptr_t address, void* const buffer, const SIZE_T size)
     {
-        memcpy(buffer, reinterpret_cast<const void*>(address), size); 
+        memcpy(buffer, reinterpret_cast<const void*>(address), size);
     }
 
     uintptr_t ReadMultiLevelPointer(uintptr_t base, const std::vector<uint32_t>& offsets)
@@ -54,6 +70,11 @@ namespace Memory
             lengthHook += ldisasm(&buffer[lengthHook], true);
 
         return lengthHook;
+    }
+
+    uintptr_t GetAbsolute(uintptr_t address) noexcept
+    {
+        return (address + 4 + *reinterpret_cast<std::int32_t*>(address));
     }
 
     bool DetourFunction32(void* src, void* dst, int len)
