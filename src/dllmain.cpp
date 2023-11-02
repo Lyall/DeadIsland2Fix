@@ -30,7 +30,7 @@ string sExeName;
 string sGameName;
 string sExePath;
 string sGameVersion;
-string sFixVer = "1.0.1";
+string sFixVer = "1.0.2";
 
 // CurrResolution Hook
 DWORD64 CurrResolutionReturnJMP;
@@ -107,42 +107,9 @@ void __declspec(naked) AspectFOVFix_CC()
             jmp originalCode
 
         originalCode:
-            mov rdx, [rdi + 0x00003508]
-            mov rcx, [rdx + 0x00000838]
+            mov rdx, [rdi + 0x00003688]
+            mov rcx, [rdx + 0x00000878]
             jmp [AspectFOVFixReturnJMP]
-    }
-}
-
-// FOVLimit Hook
-DWORD64 FOVLimitReturnJMP;
-float fMinFOV;
-float fMaxFOV;
-void __declspec(naked) FOVLimit_CC()
-{
-    __asm
-    {
-        //cmp[iFOVLimit], 1
-        //jne originalCode
-        cmp dword ptr[rsi + 0xC8], 0x428c0000 // MinFOV = 70
-        jne originalCode
-        cmp dword ptr[rsi + 0xCC], 0x42c80000 // MaxFOV = 100
-        jne originalCode
-        cmp [rsi + 0xEC], 6                   // Steps = 6
-        jne originalCode
-
-        movss xmm6, [fMinFOV]    // Min FOV
-        movss [rsi + 0xC8], xmm6
-        movss xmm6, [fMaxFOV]    // Max FOV
-        movss[rsi + 0xCC], xmm6
-        movss[rsi + 0xDC], xmm6
-        mov[rsi + 0xEC], 22      // FOV steps (increments of 5)
-        jmp originalCode
-
-        originalCode :
-            mov[rsp + 0x08], rbx
-            mov[rsp + 0x10], rsi
-            mov[rsp + 0x18], rdi
-            jmp[FOVLimitReturnJMP]
     }
 }
 
@@ -320,33 +287,6 @@ void HUDBorders()
     }
 }
 
-void FOVLimit()
-{
-    // Disabled for now until the setting sticks correctly on startup
-    bool bFOVLimit = false;
-    if (bFOVLimit)
-    {
-        uint8_t* FOVLimitScanResult = Memory::PatternScan(baseModule, "E8 ? ? ? ? 45 33 ? 49 8B ? 49 8B ? E8 ? ? ? ? 48 8B ? 48 89");
-        if (FOVLimitScanResult)
-        {
-            fMinFOV = (float)40;
-            fMaxFOV = (float)150;
-
-            DWORD64 FOVLimitAddress = Memory::GetAbsolute((uintptr_t)FOVLimitScanResult + 0x1);
-            int FOVLimitHookLength = Memory::GetHookLength((char*)FOVLimitAddress, 13);
-            FOVLimitReturnJMP = FOVLimitAddress + FOVLimitHookLength;
-            Memory::DetourFunction64((void*)FOVLimitAddress, FOVLimit_CC, FOVLimitHookLength);
-
-            LOG_F(INFO, "FOV Limit: Hook length is %d bytes", FOVLimitHookLength);
-            LOG_F(INFO, "FOV Limit: Hook address is 0x%" PRIxPTR, (uintptr_t)FOVLimitAddress);
-        }
-        else if (!FOVLimitScanResult)
-        {
-            LOG_F(INFO, "FOV Limit: Pattern scan failed.");
-        }
-    }
-}
-
 DWORD __stdcall Main(void*)
 {
     Logging();
@@ -354,7 +294,6 @@ DWORD __stdcall Main(void*)
     Sleep(iInjectionDelay);
     AspectFOVFix();
     HUDBorders();
-    FOVLimit();
     return true; // end thread
 }
 
