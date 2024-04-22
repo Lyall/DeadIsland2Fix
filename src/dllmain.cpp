@@ -21,13 +21,8 @@ filesystem::path sThisModulePath;
 std::pair DesktopDimensions = { 0,0 };
 
 // Ini Variables
-bool bCustomResolution;
-int iCustomResX;
-int iCustomResY;
-bool bHUDFix;
 bool bAspectFix;
-bool bFOVFix;
-float fAdditionalFOV;
+bool bHUDLimit;
 
 // Aspect ratio + HUD stuff
 float fPi = (float)3.141592653;
@@ -42,11 +37,6 @@ float fDefaultHUDWidth = (float)1920;
 float fDefaultHUDHeight = (float)1080;
 float fHUDWidthOffset;
 float fHUDHeightOffset;
-
-// Variables
-int iResX;
-int iResY;
-int iFullscreenMode;
 
 void Logging()
 {
@@ -117,69 +107,61 @@ void ReadConfig()
     }
 
     // Read ini file
-    inipp::get_value(ini.sections["Fix HUD"], "Enabled", bHUDFix);
     inipp::get_value(ini.sections["Fix Aspect Ratio"], "Enabled", bAspectFix);
-    inipp::get_value(ini.sections["Fix FOV"], "Enabled", bFOVFix);
-    inipp::get_value(ini.sections["Fix FOV"], "AdditionalFOV", fAdditionalFOV);
+    inipp::get_value(ini.sections["Remove HUD Size Limits"], "Enabled", bHUDLimit);
 
     // Log config parse
-    spdlog::info("Config Parse: bHUDFix: {}", bHUDFix);
     spdlog::info("Config Parse: bAspectFix: {}", bAspectFix);
-    spdlog::info("Config Parse: bFOVFix: {}", bFOVFix);
-    spdlog::info("Config Parse: fAdditionalFOV: {}", fAdditionalFOV);
+    spdlog::info("Config Parse: bHUDLimit: {}", bHUDLimit);
     spdlog::info("----------");
 }
 
 void AspectFOV()
 {
-    if (bFOVFix)
-    {
-        // Cutscene FOV
-        uint8_t* CutsceneFOVScanResult = Memory::PatternScan(baseModule, "74 ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? EB ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? 8B ?? ?? ?? ?? ??");
-        if (CutsceneFOVScanResult)
-        {
-            spdlog::info("Cutscene FOV: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)CutsceneFOVScanResult - (uintptr_t)baseModule);
-
-            static SafetyHookMid CutsceneFOVMidHook{};
-            CutsceneFOVMidHook = safetyhook::create_mid(CutsceneFOVScanResult + 0x1C,
-                [](SafetyHookContext& ctx)
-                {
-                    if (fAspectRatio > fNativeAspect)
-                    {
-                        ctx.xmm0.f32[0] = atanf(tanf(ctx.xmm0.f32[0] * (fPi / 360)) / fNativeAspect * fAspectRatio) * (360 / fPi);
-                    }
-                });
-        }
-        else if (!CutsceneFOVScanResult)
-        {
-            spdlog::error("Cutscene FOV: Pattern scan failed.");
-        }
-    }
-
     if (bAspectFix)
     {
-        // Aspect Ratio
-        uint8_t* CutsceneAspectRatioScanResult = Memory::PatternScan(baseModule, "89 ?? ?? 8B ?? ?? 33 ?? ?? ?? ?? 00 83 ?? 01 31 ?? ?? 8B ?? ??");
-        if (GameplayAspectRatioScanResult)
+        // Cutscene Aspect Ratio
+        uint8_t* CutsceneAspectRatioScanResult = Memory::PatternScan(baseModule, "0F ?? ?? ?? 77 ?? F3 0F ?? ?? ?? 40 ?? 01");
+        if (CutsceneAspectRatioScanResult)
         {
-            spdlog::info("Gameplay Aspect Ratio: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)GameplayAspectRatioScanResult - (uintptr_t)baseModule);
-            static SafetyHookMid GameplayAspectRatioMidHook{};
-            GameplayAspectRatioMidHook = safetyhook::create_mid(GameplayAspectRatioScanResult,
-                [](SafetyHookContext& ctx)
-                {
-                    ctx.rax = *(uint32_t*)&fAspectRatio;
-                });           
+            spdlog::info("Cutscene Aspect Ratio: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)CutsceneAspectRatioScanResult - (uintptr_t)baseModule);
+            Memory::PatchBytes((uintptr_t)CutsceneAspectRatioScanResult + 0x4, "\xEB", 1);
+            spdlog::info("Cutscene Aspect Ratio: Patched instruction.");
         }
-        else if (!GameplayAspectRatioScanResult)
+        else if (!CutsceneAspectRatioScanResult)
         {
-            spdlog::error("Aspect Ratio: Pattern scan failed.");
+            spdlog::error("Cutscene Aspect Ratio: Pattern scan failed.");
         }
     }
 }
 
-void HUDFix()
+void Miscellaneous()
 {
-    
+    if (bHUDLimit)
+    {
+        // HUD Border Limit
+        uint8_t* HUDBorderLimitScanResult = Memory::PatternScan(baseModule, "0F ?? ?? ?? ?? F3 0F ?? ?? F3 0F ?? ?? 0F ?? ?? 72 ?? F3 0F ?? ?? A8 ?? ?? ??");
+        if (HUDBorderLimitScanResult)
+        {
+            spdlog::info("Gameplay Aspect Ratio: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)HUDBorderLimitScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid HUDBorderLimitMidHook{};
+            HUDBorderLimitMidHook = safetyhook::create_mid(HUDBorderLimitScanResult,
+                [](SafetyHookContext& ctx)
+                {
+                    if (ctx.rcx + 0xA8)
+                    {
+                        // Width limit
+                        *reinterpret_cast<float*>(ctx.rcx + 0xA8) = 0.45f;
+                        // Height limit
+                        *reinterpret_cast<float*>(ctx.rcx + 0xAC) = 0.45f;
+                    }
+                });
+        }
+        else if (!HUDBorderLimitScanResult)
+        {
+            spdlog::error("Aspect Ratio: Pattern scan failed.");
+        }
+    }
 }
 
 DWORD __stdcall Main(void*)
@@ -187,7 +169,7 @@ DWORD __stdcall Main(void*)
     Logging();
     ReadConfig();
     AspectFOV();
-    HUDFix();
+    Miscellaneous();
     return true;
 }
 
