@@ -1,5 +1,5 @@
 # Dead Island 2 Fix
-[![Patreon-Button](https://github.com/Lyall/DeadIsland2Fix/assets/695941/e620e516-0368-4681-bc1b-d58272284d67)](https://www.patreon.com/Wintermance) [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W7W01UAI9)<br />
+[![Patreon-Button](https://github.com/Lyall/DeadIsland2Fix/assets/695941/6c97db50-da3d-4762-9f41-eddf522a4ce5)](https://www.patreon.com/Wintermance) [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/W7W01UAI9)<br />
 [![Github All Releases](https://img.shields.io/github/downloads/Lyall/DeadIsland2Fix/total.svg)](https://github.com/Lyall/DeadIsland2Fix/releases)
 
 This is a fix to remove pillarboxing/letterboxing in Dead Island 2.<br />
