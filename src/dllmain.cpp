@@ -1,300 +1,194 @@
 #include "stdafx.h"
 #include "helper.hpp"
-
-using namespace std;
+#include <inipp/inipp.h>
+#include <spdlog/spdlog.h>
+#include <spdlog/sinks/basic_file_sink.h>
+#include <safetyhook.hpp>
 
 HMODULE baseModule = GetModuleHandle(NULL);
+HMODULE thisModule;
 
+// Logger and config setup
 inipp::Ini<char> ini;
+std::shared_ptr<spdlog::logger> logger;
+string sFixName = "DeadIsland2Fix";
+string sFixVer = "1.0.3";
+string sLogFile = "DeadIsland2Fix.log";
+string sConfigFile = "DeadIsland2Fix.ini";
+string sExeName;
+filesystem::path sExePath;
+filesystem::path sThisModulePath;
+std::pair DesktopDimensions = { 0,0 };
 
-// INI Variables
-bool bAspectFix;
-bool bFOVFix;
-bool bHUDBorderLimit;
-int iHUDBorderLimit;
+// Ini Variables
+bool bCustomResolution;
 int iCustomResX;
 int iCustomResY;
-int iInjectionDelay;
+bool bHUDFix;
+bool bAspectFix;
+bool bFOVFix;
 float fAdditionalFOV;
-int iAspectFix;
-int iFOVFix;
+
+// Aspect ratio + HUD stuff
+float fPi = (float)3.141592653;
+float fNativeAspect = (float)16 / 9;
+float fNativeWidth;
+float fNativeHeight;
+float fAspectRatio;
+float fAspectMultiplier;
+float fHUDWidth;
+float fHUDHeight;
+float fDefaultHUDWidth = (float)1920;
+float fDefaultHUDHeight = (float)1080;
+float fHUDWidthOffset;
+float fHUDHeightOffset;
 
 // Variables
-int iNarrowAspect;
-float fNewX;
-float fNewY;
-float fNativeAspect = (float)16/9;
-float fPi = 3.14159265358979323846f;
-float fNewAspect;
-string sExeName;
-string sGameName;
-string sExePath;
-string sGameVersion;
-string sFixVer = "1.0.2";
-
-// CurrResolution Hook
-DWORD64 CurrResolutionReturnJMP;
-void __declspec(naked) CurrResolution_CC()
-{
-    __asm
-    {
-        mov[rdi + 0x000000A0], edx              // Original Code
-        mov[rdi + 0x000000A4], eax              // Original Code
-        mov[rdi + 0x000000A8], r9d              // Original Code
-
-        mov[iCustomResX], r9d                 // Grab current resX
-        mov[iCustomResY], ecx                 // Grab current resY
-        cvtsi2ss xmm14, r9d
-        cvtsi2ss xmm15, ecx
-        divss xmm14,xmm15
-        movss [fNewAspect], xmm14              // Grab current aspect ratio
-        movss xmm15, [fNativeAspect]
-        comiss xmm14, xmm15
-        ja narrowAspect
-        mov [iNarrowAspect], 1
-        xorps xmm14, xmm14
-        xorps xmm15, xmm15
-        jmp[CurrResolutionReturnJMP]
-
-        narrowAspect:
-            mov [iNarrowAspect], 0
-            xorps xmm14, xmm14
-            xorps xmm15, xmm15
-            jmp[CurrResolutionReturnJMP]
-    }
-}
-
-// Aspect Ratio/FOV Hook
-DWORD64 AspectFOVFixReturnJMP;
-float FOVPiDiv;
-float FOVDivPi;
-float FOVFinalValue;
-void __declspec(naked) AspectFOVFix_CC()
-{
-    __asm
-    {
-        cmp rax, 1
-        jne originalCode
-        cmp [iAspectFix], 1
-        je modifyAspect
-        cmp [iFOVFix], 1                       // Check if FOVFix is enabled
-        je modifyFOV                           // jmp to FOV fix
-        jmp originalCode                       // jmp to originalCode
-
-        modifyAspect:
-            mov eax, [fNewAspect]                  // Move new aspect to eax
-            mov [rsi+0x3C], eax
-            cmp [iFOVFix], 1                        // Check if FOVFix is enabled
-            je modifyFOV                           // jmp to FOV fix
-            jmp originalCode
-
-        modifyFOV:
-            cmp [iNarrowAspect], 1
-            je originalCode
-            fld dword ptr[rsi + 0x28]         // Push original FOV to FPU register st(0)
-            fmul[FOVPiDiv]                     // Multiply st(0) by Pi/360
-            fptan                              // Get partial tangent. Store result in st(1). Store 1.0 in st(0)
-            fxch st(1)                         // Swap st(1) to st(0)
-            fdiv[fNativeAspect]                // Divide st(0) by 1.778~
-            fmul[fNewAspect]                   // Multiply st(0) by new aspect ratio
-            fxch st(1)                         // Swap st(1) to st(0)
-            fpatan                             // Get partial arc tangent from st(0), st(1)
-            fmul[FOVDivPi]                     // Multiply st(0) by 360/Pi
-            fadd[fAdditionalFOV]               // Add additional FOV
-            fstp[FOVFinalValue]                // Store st(0) 
-            movss xmm0, [FOVFinalValue]        // Copy final FOV value to xmm0
-            movss[rsi + 0x28], xmm0
-            jmp originalCode
-
-        originalCode:
-            mov rdx, [rdi + 0x00003688]
-            mov rcx, [rdx + 0x00000878]
-            jmp [AspectFOVFixReturnJMP]
-    }
-}
-
-// HUDBorderLimit Hook
-DWORD64 HUDBorderLimitReturnJMP;
-float fHUDBorderLimit;
-void __declspec(naked) HUDBorderLimit_CC()
-{
-    __asm
-    {
-        cmp [iHUDBorderLimit], 1
-        jne originalCode
-        movss xmm2, [fHUDBorderLimit]
-        movss xmm0, [fHUDBorderLimit]
-        jmp originalCode
-
-        originalCode:
-            movss[rax + 0x000000AC], xmm2 // Original code
-            movss[rax + 0x000000A8], xmm0 // Original code
-            jmp[HUDBorderLimitReturnJMP]
-    }
-}
+int iResX;
+int iResY;
+int iFullscreenMode;
 
 void Logging()
 {
-    loguru::add_file("DeadIsland2Fix.log", loguru::Truncate, loguru::Verbosity_MAX);
-    loguru::set_thread_name("Main");
+    // Get this module path
+    WCHAR thisModulePath[_MAX_PATH] = { 0 };
+    GetModuleFileNameW(thisModule, thisModulePath, MAX_PATH);
+    sThisModulePath = thisModulePath;
+    sThisModulePath = sThisModulePath.remove_filename();
 
-    LOG_F(INFO, "DeadIsland2Fix v%s loaded", sFixVer.c_str());
+    // Get game name and exe path
+    WCHAR exePath[_MAX_PATH] = { 0 };
+    GetModuleFileNameW(baseModule, exePath, MAX_PATH);
+    sExePath = exePath;
+    sExeName = sExePath.filename().string();
+    sExePath = sExePath.remove_filename();
+
+    // Calculate aspect ratio / use desktop res instead
+    DesktopDimensions = Util::GetPhysicalDesktopDimensions();
+
+    // spdlog initialisation
+    {
+        try
+        {
+            logger = spdlog::basic_logger_st(sFixName.c_str(), sThisModulePath.string() + sLogFile, true);
+            spdlog::set_default_logger(logger);
+
+            spdlog::flush_on(spdlog::level::debug);
+            spdlog::info("----------");
+            spdlog::info("{} v{} loaded.", sFixName.c_str(), sFixVer.c_str());
+            spdlog::info("----------");
+            spdlog::info("Path to logfile: {}", sThisModulePath.string() + sLogFile);
+            spdlog::info("----------");
+
+            // Log module details
+            spdlog::info("Module Name: {0:s}", sExeName.c_str());
+            spdlog::info("Module Path: {0:s}", sExePath.string());
+            spdlog::info("Module Address: 0x{0:x}", (uintptr_t)baseModule);
+            spdlog::info("Module Timestamp: {0:d}", Memory::ModuleTimestamp(baseModule));
+            spdlog::info("----------");
+        }
+        catch (const spdlog::spdlog_ex& ex)
+        {
+            AllocConsole();
+            FILE* dummy;
+            freopen_s(&dummy, "CONOUT$", "w", stdout);
+            std::cout << "Log initialisation failed: " << ex.what() << std::endl;
+        }
+    }
 }
 
 void ReadConfig()
 {
-    // Get game name and exe path
-    LPWSTR exePath = new WCHAR[_MAX_PATH];
-    GetModuleFileNameW(baseModule, exePath, _MAX_PATH);
-    wstring exePathWString(exePath);
-    sExePath = string(exePathWString.begin(), exePathWString.end());
-    wstring wsGameName = Memory::GetVersionProductName();
-    sExeName = sExePath.substr(sExePath.find_last_of("/\\") + 1);
-    sGameName = string(wsGameName.begin(), wsGameName.end());
-
-    LOG_F(INFO, "Game Name: %s", sGameName.c_str());
-    LOG_F(INFO, "Game Path: %s", sExePath.c_str());
-
-    // Initialize config
-    // UE4 games use launchers so config path is relative to launcher
-    std::ifstream iniFile(".\\DeadIsland\\Binaries\\Win64\\DeadIsland2Fix.ini");
+    // Initialise config
+    std::ifstream iniFile(sThisModulePath.string() + sConfigFile);
     if (!iniFile)
     {
-        LOG_F(ERROR, "Failed to load config file.");
-        LOG_F(ERROR, "Trying alternate config path.");
-
-        std::ifstream iniFile("DeadIsland2Fix.ini");
-        if (!iniFile)
-        {
-            LOG_F(ERROR, "Failed to load config file. (Alternate path)");
-            LOG_F(ERROR, "Please ensure that the ini configuration file is in the correct place.");
-        }
-        else
-        {
-            ini.parse(iniFile);
-            LOG_F(INFO, "Successfuly loaded config file. (Alternate path)");
-        }
+        AllocConsole();
+        FILE* dummy;
+        freopen_s(&dummy, "CONOUT$", "w", stdout);
+        std::cout << "" << sFixName.c_str() << " v" << sFixVer.c_str() << " loaded." << std::endl;
+        std::cout << "ERROR: Could not locate config file." << std::endl;
+        std::cout << "ERROR: Make sure " << sConfigFile.c_str() << " is located in " << sThisModulePath.string().c_str() << std::endl;
     }
     else
     {
+        spdlog::info("Path to config file: {}", sThisModulePath.string() + sConfigFile);
         ini.parse(iniFile);
-        LOG_F(INFO, "Successfuly loaded config file.");
     }
 
-    LOG_F(INFO, "Game Version: %s", sGameVersion.c_str());
-
-    inipp::get_value(ini.sections["DeadIsland2Fix Parameters"], "InjectionDelay", iInjectionDelay);
+    // Read ini file
+    inipp::get_value(ini.sections["Fix HUD"], "Enabled", bHUDFix);
     inipp::get_value(ini.sections["Fix Aspect Ratio"], "Enabled", bAspectFix);
-    iAspectFix = (int)bAspectFix;
     inipp::get_value(ini.sections["Fix FOV"], "Enabled", bFOVFix);
-    iFOVFix = (int)bFOVFix;
     inipp::get_value(ini.sections["Fix FOV"], "AdditionalFOV", fAdditionalFOV);
-    inipp::get_value(ini.sections["Remove HUD Size Limits"], "Enabled", bHUDBorderLimit);
-    iHUDBorderLimit = (int)bHUDBorderLimit;
-
-    // Custom resolution
-    if (iCustomResX > 0 && iCustomResY > 0)
-    {
-        fNewX = (float)iCustomResX;
-        fNewY = (float)iCustomResY;
-        fNewAspect = (float)iCustomResX / (float)iCustomResY;
-    }
-    else
-    {
-        // Grab desktop resolution
-        RECT desktop;
-        GetWindowRect(GetDesktopWindow(), &desktop);
-        fNewX = (float)desktop.right;
-        fNewY = (float)desktop.bottom;
-        iCustomResX = (int)desktop.right;
-        iCustomResY = (int)desktop.bottom;
-        fNewAspect = (float)desktop.right / (float)desktop.bottom;
-    }
 
     // Log config parse
-    LOG_F(INFO, "Config Parse: iInjectionDelay: %dms", iInjectionDelay);
-    LOG_F(INFO, "Config Parse: bAspectFix: %d", bAspectFix);
-    LOG_F(INFO, "Config Parse: bFOVFix: %d", bFOVFix);
-    LOG_F(INFO, "Config Parse: bHUDBorderLimit: %d", bHUDBorderLimit);
-    LOG_F(INFO, "Config Parse: iCustomResX: %d", iCustomResX);
-    LOG_F(INFO, "Config Parse: iCustomResY: %d", iCustomResY);
-    LOG_F(INFO, "Config Parse: fNewX: %.2f", fNewX);
-    LOG_F(INFO, "Config Parse: fNewY: %.2f", fNewY);
-    LOG_F(INFO, "Config Parse: fNewAspect: %.4f", fNewAspect);
+    spdlog::info("Config Parse: bHUDFix: {}", bHUDFix);
+    spdlog::info("Config Parse: bAspectFix: {}", bAspectFix);
+    spdlog::info("Config Parse: bFOVFix: {}", bFOVFix);
+    spdlog::info("Config Parse: fAdditionalFOV: {}", fAdditionalFOV);
+    spdlog::info("----------");
 }
 
-void AspectFOVFix()
+void AspectFOV()
 {
-    if (bAspectFix || bFOVFix)
+    if (bFOVFix)
     {
-        uint8_t* CurrResolutionScanResult = Memory::PatternScan(baseModule, "89 ?? ?? ?? ?? ?? 89 ?? ?? ?? ?? ?? 44 ?? ?? ?? ?? ?? ?? 89 ?? ?? ?? 44 ?? ?? ??");
-        if (CurrResolutionScanResult)
+        // Cutscene FOV
+        uint8_t* CutsceneFOVScanResult = Memory::PatternScan(baseModule, "74 ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? EB ?? F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? 8B ?? ?? ?? ?? ??");
+        if (CutsceneFOVScanResult)
         {
-            DWORD64 CurrResolutionAddress = (uintptr_t)CurrResolutionScanResult;
-            int CurrResolutionHookLength = Memory::GetHookLength((char*)CurrResolutionAddress, 13);
-            CurrResolutionReturnJMP = CurrResolutionAddress + CurrResolutionHookLength;
-            Memory::DetourFunction64((void*)CurrResolutionAddress, CurrResolution_CC, CurrResolutionHookLength);
+            spdlog::info("Cutscene FOV: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)CutsceneFOVScanResult - (uintptr_t)baseModule);
 
-            LOG_F(INFO, "Current Resolution: Hook length is %d bytes", CurrResolutionHookLength);
-            LOG_F(INFO, "Current Resolution: Hook address is 0x%" PRIxPTR, (uintptr_t)CurrResolutionAddress);
+            static SafetyHookMid CutsceneFOVMidHook{};
+            CutsceneFOVMidHook = safetyhook::create_mid(CutsceneFOVScanResult + 0x1C,
+                [](SafetyHookContext& ctx)
+                {
+                    if (fAspectRatio > fNativeAspect)
+                    {
+                        ctx.xmm0.f32[0] = atanf(tanf(ctx.xmm0.f32[0] * (fPi / 360)) / fNativeAspect * fAspectRatio) * (360 / fPi);
+                    }
+                });
         }
-        else if (!CurrResolutionScanResult)
+        else if (!CutsceneFOVScanResult)
         {
-            LOG_F(INFO, "Current Resolution: Pattern scan failed.");
+            spdlog::error("Cutscene FOV: Pattern scan failed.");
         }
+    }
 
-        uint8_t* AspectFOVFixScanResult = Memory::PatternScan(baseModule, "E8 ?? ?? ?? ?? F3 0F ?? ?? ?? 48 ?? ?? ?? ?? ?? ?? 48 ?? ?? ?? ?? ?? ?? 48 ?? ?? 75 ??");
-        if (AspectFOVFixScanResult)
+    if (bAspectFix)
+    {
+        // Aspect Ratio
+        uint8_t* CutsceneAspectRatioScanResult = Memory::PatternScan(baseModule, "89 ?? ?? 8B ?? ?? 33 ?? ?? ?? ?? 00 83 ?? 01 31 ?? ?? 8B ?? ??");
+        if (GameplayAspectRatioScanResult)
         {
-            FOVPiDiv = fPi / 360;
-            FOVDivPi = 360 / fPi;
-
-            DWORD64 AspectFOVFixAddress = (uintptr_t)AspectFOVFixScanResult + 0xA;
-            int AspectFOVFixHookLength = Memory::GetHookLength((char*)AspectFOVFixAddress, 13);
-            AspectFOVFixReturnJMP = AspectFOVFixAddress + AspectFOVFixHookLength;
-            Memory::DetourFunction64((void*)AspectFOVFixAddress, AspectFOVFix_CC, AspectFOVFixHookLength);
-
-            LOG_F(INFO, "Aspect Ratio/FOV: Hook length is %d bytes", AspectFOVFixHookLength);
-            LOG_F(INFO, "Aspect Ratio/FOV: Hook address is 0x%" PRIxPTR, (uintptr_t)AspectFOVFixAddress);
+            spdlog::info("Gameplay Aspect Ratio: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)GameplayAspectRatioScanResult - (uintptr_t)baseModule);
+            static SafetyHookMid GameplayAspectRatioMidHook{};
+            GameplayAspectRatioMidHook = safetyhook::create_mid(GameplayAspectRatioScanResult,
+                [](SafetyHookContext& ctx)
+                {
+                    ctx.rax = *(uint32_t*)&fAspectRatio;
+                });           
         }
-        else if (!AspectFOVFixScanResult)
+        else if (!GameplayAspectRatioScanResult)
         {
-            LOG_F(INFO, "Aspect Ratio/FOV: Pattern scan failed.");
-        }  
-
-      
+            spdlog::error("Aspect Ratio: Pattern scan failed.");
+        }
     }
 }
 
-void HUDBorders()
+void HUDFix()
 {
-    uint8_t* HUDBorderLimitScanResult = Memory::PatternScan(baseModule, "F3 0F ?? ?? ?? ?? ?? ?? F3 0F ?? ?? ?? ?? ?? ?? 48 8B ?? ?? ?? ?? ?? 8B ?? ?? ?? ?? ?? 89 ?? ?? ?? ?? ??");
-    if (HUDBorderLimitScanResult)
-    {
-        fHUDBorderLimit = (float)0.45; // 0.5 would result in an effectively invisible HUD so lets avoid that by limiting it a bit lower.
-
-        DWORD64 HUDBorderLimitAddress = (uintptr_t)HUDBorderLimitScanResult;
-        int HUDBorderLimitHookLength = Memory::GetHookLength((char*)HUDBorderLimitAddress, 13);
-        HUDBorderLimitReturnJMP = HUDBorderLimitAddress + HUDBorderLimitHookLength;
-        Memory::DetourFunction64((void*)HUDBorderLimitAddress, HUDBorderLimit_CC, HUDBorderLimitHookLength);
-
-        LOG_F(INFO, "HUD Border Limit: Hook length is %d bytes", HUDBorderLimitHookLength);
-        LOG_F(INFO, "HUD Border Limit: Hook address is 0x%" PRIxPTR, (uintptr_t)HUDBorderLimitAddress);
-    }
-    else if (!HUDBorderLimitScanResult)
-    {
-        LOG_F(INFO, "HUD Border Limit: Pattern scan failed.");
-    }
+    
 }
 
 DWORD __stdcall Main(void*)
 {
     Logging();
     ReadConfig();
-    Sleep(iInjectionDelay);
-    AspectFOVFix();
-    HUDBorders();
-    return true; // end thread
+    AspectFOV();
+    HUDFix();
+    return true;
 }
 
 BOOL APIENTRY DllMain( HMODULE hModule,
@@ -306,10 +200,11 @@ BOOL APIENTRY DllMain( HMODULE hModule,
     {
     case DLL_PROCESS_ATTACH:
     {
+        thisModule = hModule;
         HANDLE mainHandle = CreateThread(NULL, 0, Main, 0, NULL, 0);
-
         if (mainHandle)
         {
+            SetThreadPriority(mainHandle, THREAD_PRIORITY_HIGHEST); // set our Main thread priority higher than the games thread
             CloseHandle(mainHandle);
         }
     }
