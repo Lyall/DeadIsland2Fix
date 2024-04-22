@@ -125,6 +125,7 @@ void AspectFOV()
         if (CutsceneAspectRatioScanResult)
         {
             spdlog::info("Cutscene Aspect Ratio: Address is {:s}+{:x}", sExeName.c_str(), (uintptr_t)CutsceneAspectRatioScanResult - (uintptr_t)baseModule);
+            // Jump over code that compares current aspect ratio to 1.7778~
             Memory::PatchBytes((uintptr_t)CutsceneAspectRatioScanResult + 0x4, "\xEB", 1);
             spdlog::info("Cutscene Aspect Ratio: Patched instruction.");
         }
